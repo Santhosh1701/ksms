@@ -10,7 +10,8 @@ import enrollmentroutes from "./routes/EnrollmentRt.js"
 import xlupload from "./routes/ExcelUploadRt.js"
 import transactionrt from "./routes/TransactionRt.js"
 import ledgerrt from "./routes/LedgerRoutes.js"
-
+import staticrt from "./routes/StaticSchemaRt.js"
+import cors from "cors"
 dotenv.config();
 const app = express();
 export const errorHandler = (err, req, res, next) => {
@@ -36,6 +37,7 @@ app.use("/api/enrollment", enrollmentroutes)
 app.use("/api/upload", xlupload)
 app.use("/api/transaction", transactionrt)
 app.use("/api/ledger", ledgerrt)
+app.use("/api/static", staticrt)
 
 
 const connect = async () => {

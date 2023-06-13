@@ -12,7 +12,7 @@ export const createStudent = async (req, res, next) => {
       const query = {
         courseName: req.body.grade,
         year: req.body.academicYear,
-        studentCategory: req.body.category,
+       
       };
       const coursedata = await course.findOne({ courseName: req.body.grade })
       const courseFeedata = await courseFees.findOne(query)
@@ -21,7 +21,11 @@ export const createStudent = async (req, res, next) => {
       console.log(Studentcnt)
       if (Studentcnt < 1) {
         const newStudent = new student({
-          Name: req.body.Name,
+          Name: {
+            fName: req.body.fname,
+            mName: req.body.mname,
+            lName: req.body.lname,
+          },
           dateOfBirth: req.body.dateOfBirth,
           fatherName: req.body.fatherName,
           motherName: req.body.motherName,
@@ -43,33 +47,74 @@ export const createStudent = async (req, res, next) => {
           vanApplicable: req.body.vanApplicable,
           vanStop: req.body.vanStop,
           newStudent: req.body.newStudent,
+          admissionFeeCategory: req.body.admissionFeeCategory,
         });
         console.log(newStudent);
         await newStudent.save();
-        const arraySize = 3;
-        const array = new Array(arraySize);
-        // Initialize all elements with 0
-        array.fill(0);
+        console.log("student saved");
+        if(req.body.newStudent) {
+          const coursecnt = await course.countDocuments({ courseName: req.body.admissionFeeCategory })
+          console.log(coursecnt)
+          if (coursecnt > 0) {
+            const query = {
+              courseName: req.body.admissionFeeCategory,
+              year: req.body.academicYear
+            };
+            const coursedata = await course.findOne({ courseName: req.body.admissionFeeCategory})
+            if(coursedata != "") {
+            console.log(coursedata)
+            } else {
+              return next(createError(500, "empty data received"))
+            }
+            const courseFeedata = await courseFees.findOne(query)
+            if(courseFeedata != "") {
+            console.log(courseFeedata)
+            } else {
+              return next(createError(500, "empty data received"))
+            }
+            
+            const admenrollment = new enrollment({
+              year: req.body.academicYear,
+              userId: newStudent.rollNumber,
+              totalPaid: 0,
+              totalCharges: courseFeedata.totalCharges,
+              courseName: req.body.admissionFeeCategory,
+              courseId: coursedata.courseId,
+              feesCategory: "admissionFees",
+              balance: courseFeedata.totalCharges,
+            })
+            console.log(admenrollment)
+            await admenrollment.save();
+            console.log("Successfully saved admission fee enrollment")
+          }
+        } else {
+          console.log("old student")
+        }
+        console.log("course fee data", courseFeedata.Term)
+        const termData = courseFeedata.Term;
+        const termValueCopy = JSON.parse(JSON.stringify(termData));
+        var TermPaid = termValueCopy;
+        console.log("Term Paid data", TermPaid);
+        TermPaid.fill(0);
+        console.log("TermPaid",TermPaid);
         console.log(courseFeedata.totalCharges)
         const newenrollment = new enrollment({
           year: req.body.academicYear,
           userId: newStudent.rollNumber,
           totalCharges: courseFeedata.totalCharges,
           totalPaid: 0,
-          balance: 0,
-          termPaid: array,
+          balance: courseFeedata.totalCharges,
+          termPaid: TermPaid,
+          term: courseFeedata.Term,
           courseName: req.body.grade,
           section: req.body.section,
           courseId: coursedata.courseId,
-          feesCategory: "termFees",
-          bookFees: courseFeedata.bookFees,
-          bookFeesBalance: 0,
-          admissionFees: courseFeedata.admissionFees,
-          admissionFeesBalance: 0
+          feesCategory: "termFees"
         })
         console.log(newenrollment)
         await newStudent.save();
         await newenrollment.save();
+
         const van = req.body.vanApplicable
         if (van) {
           const coursecnt = await course.countDocuments({ courseName: req.body.vanStop })
@@ -80,29 +125,40 @@ export const createStudent = async (req, res, next) => {
               year: req.body.academicYear
             };
             const coursedata = await course.findOne({ courseName: req.body.vanStop })
+            if(coursedata != "") {
             console.log(coursedata)
+            } else {
+              return next(createError(500, "empty data received"))
+            }
             const courseFeedata = await courseFees.findOne(query)
+            if(courseFeedata != "") {
             console.log(courseFeedata)
-            //const vanStop = req.body.vanStop
-            const newenrollment = new enrollment({
+            } else {
+              return next(createError(500, "empty data received"))
+            }
+            const vanStop = req.body.vanStop
+            console.log(vanStop)
+            const vanenrollment = new enrollment({
               year: req.body.academicYear,
               userId: newStudent.rollNumber,
-              vanFees: courseFeedata.vanFees,
               totalPaid: 0,
+              totalCharges:  courseFeedata.totalCharges,
               section: req.body.section,
               courseName: req.body.vanStop,
               courseId: coursedata.courseId,
               feesCategory: "vanFees",
-              balance: 0,
+              balance: courseFeedata.totalCharges,
             })
-            console.log(newenrollment)
-            await newenrollment.save();
+            console.log(vanenrollment)
+            await vanenrollment.save();
+            console.log("Successfully saved enrollment")
           }
           else {
             next(createError(500, "Fee is not defined for van"))
           }
         }
-        res.status(200).send("User Created SuccessFully");
+        var response = [newStudent, newenrollment] 
+        res.status(200).send(response);
       }
       else {
         return next(createError("500", "user already exists"))
@@ -120,7 +176,11 @@ export const createStudent = async (req, res, next) => {
 export const getstudents = async (req, res, next) => {
   try {
     const allStudents = await student.find();
+    if(allStudents != "") {
     res.status(201).send(allStudents);
+    } else {
+      return next(createError(500, "empty data received"))
+    }
   } catch (err) {
     next(err)
   }
@@ -129,7 +189,8 @@ export const getstudents = async (req, res, next) => {
 //Particular Student Details
 export const getstudent = async (req, res, next) => {
   try {
-    const Student = await student.findById(req.params.id);
+    const rollnumber = req.params.id
+    const Student = await student.findOne({rollNumber: rollnumber});
     const query = {
       userId: req.body.rollNumber
     }
@@ -145,6 +206,22 @@ export const getstudent = async (req, res, next) => {
   }
 };
 
+export const getstudentByName = async (req, res, next) => {
+  try {
+    console.log("inside get by name")
+    const studentName = req.body.fName;
+    console.log(studentName)
+    const Student = await student.find({"Name.fName": studentName})
+    console.log(Student)
+    res.status(201).json(
+      {
+        status: "success",
+        details: Student,
+      });
+  } catch (err) {
+    next(err)
+  }
+};
 //Update Student Details
 export const updateStudent = async (req, res, next) => {
   try {
@@ -169,5 +246,24 @@ export const deleteStudent = async (req, res, next) => {
     return res.status(204).send("Student has been deleted");
   } catch (err) {
     next(err)
+  }
+};
+
+export const commonsearch = async (req, res, next) => {
+  try{
+    const query = req.body.query;
+  const results = await student.find(query).toArray();
+  // Return the search results
+  if(results != "") {
+    console.log("check");
+   // const results = await cursor.toArray();
+    // Return the search results
+    return res.status(201).send(results);
+    }else {
+      console.log("error")
+      return next(createError(500, "cannot retrieve data"))
+    }
+  } catch(err) {
+    nexr(err)
   }
 };
